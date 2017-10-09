@@ -141,7 +141,7 @@ function upload_file {
         --user api:$api_key \
         --data-binary @$file \
         --dump-header /dev/stdout 2> /dev/null \
-        | grep "location" | cut -d" " -f 2 | tr -dc "[:print:]")
+        | grep -i "location" | cut -d" " -f 2 | tr -dc "[:print:]")
 
     if [ -z $location ]
     then
@@ -200,9 +200,16 @@ function process_file {
 }
 
 function loop_files {
+    cnt=0
+
     for file in ${files[@]}
     do
         process_file $file &
+        if [ $((cnt%10)) = 0 ] && [ $cnt != 0 ]
+        then
+            wait
+        fi
+        cnt=$((cnt+1))
     done
     
     wait
