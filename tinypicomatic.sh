@@ -3,20 +3,21 @@
 ### CONFIG ###
 
 api_url="https://api.tinify.com/shrink"
+failed_file=".tinypicomatic.failed.txt"
 
 ### COLORS ###
 
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-NORMAL='\033[0m'
+RED="\033[0;31m"
+GREEN="\033[0;32m"
+NORMAL="\033[0m"
 
 ### SCRIPT ###
 
 function get_args {
     while [[ $# -gt 0 ]]
     do
-        arg=$1
-        case $arg in
+        arg="$1"
+        case "$arg" in
             -p|--path)
                 path=$2
                 shift
@@ -34,12 +35,12 @@ function get_args {
             ;;
             -h|--help)
                 echo "Usage: tinypicomatic [OPTION]
-Use the tinyPNG API to reduce the weight of pictures in a directory.
+Use the TinyPNG API to reduce the weight of pictures in a directory.
 Example: tinypicomatic -k \"YOUR-API-KEY\" -p ./
 
 Options:
-    -k, --api-key       Your API key for tinyPNG
-    -p, --path          Path of the directory where to convert images
+    -k, --api-key       Your API key for TinyPNG
+    -p, --path          Path of the directory where images are located
     -b, --backup-path   If specified, images will be copied there before any change is done
     -h, --help          Display this help and exit
   
@@ -56,32 +57,32 @@ If no path is specified the default one is the current directory."
 }
 
 function check_args {
-    if [ -z $api_key ]
+    if [ -z "$api_key" ]
     then
         echo "Error: You have to specify an api key"
         exit 1
     fi
 
-    if [ -z $path ]
+    if [ -z "$path" ]
     then
         path="."
     else
-        if [ ! -d $path ]
+        if [ ! -d "$path" ]
         then
             echo "Error: Specified path directory does not exist"
             exit 1
         fi
         path=${path%/}
-        if [[ ${path:0:2} == "./" ]]
+        if [[ ${path:0:2} = "./" ]]
         then
             path=${path:2}
         fi
     fi
 
-    if [ ! -z $backup_path ]
+    if [ ! -z "$backup_path" ]
     then
         backup_path=${backup_path%/}
-        if [[ ${backup_path:0:2} == "./" ]]
+        if [[ ${backup_path:0:2} = "./" ]]
         then
             backup_path=${backup_path:2}
         fi
@@ -89,27 +90,23 @@ function check_args {
 }
 
 function get_files {
-    if [ -z $backup_path ]
-    then
-        files=($(find $path -name "*.png" -o -name "*.jpg" -o -name "*.jpeg"))
-    else
-        files=($(find $path -name "*.png" -not -path "$backup_path/*" \
-            -o -name "*.jpg" -not -path "$backup_path/*" \
-            -o -name "*.jpeg" -not -path "$backup_path/*"))
-    fi
+    files=()
+    while IFS=  read -r -d $'\0'; do
+        files+=("$REPLY")
+    done < <(find "$path" \( -name "*.png" -o -name "*.jpg" -o -name "*.jpeg" \) -print0)
 }
 
 function create_backup_dir {
-    if [ ! -d $backup_path ] && [ ! -z $backup_path ]
+    if [ ! -d "$backup_path" ] && [ ! -z "$backup_path" ]
     then
-        mkdir $backup_path
+        mkdir "$backup_path"
     fi
 }
 
 function check_file {
-    file_type=$(file $1 | cut -d" " -f 2)
+    file_type=$(file "$1" | grep -oh "PNG\|JPEG")
 
-    if [ $file_type != "PNG" ] && [ $file_type != "JPEG" ]
+    if [ "$file_type" != "PNG" ] && [ "$file_type" != "JPEG" ]
     then
         echo -e "[${RED}KO${NORMAL}] Check \"$1\" is a valid file"
         return 1
@@ -119,11 +116,11 @@ function check_file {
 }
 
 function backup_file {
-    if [ -z $backup_path ]
+    if [ -z "$backup_path" ]
     then
         return
     fi
-    file_name=$(basename $file)
+    file_name=$(basename "$file")
 
     cp "$file" "$backup_path/$file_name" 2> /dev/null
 
@@ -137,13 +134,13 @@ function backup_file {
 }
 
 function upload_file {
-    location=$(curl -s $api_url \
-        --user api:$api_key \
-        --data-binary @$file \
+    location=$(curl -s "$api_url" \
+        --user api:"$api_key" \
+        --data-binary @"$file" \
         --dump-header /dev/stdout 2> /dev/null \
         | grep -i "location" | cut -d" " -f 2 | tr -dc "[:print:]")
 
-    if [ -z $location ]
+    if [ -z "$location" ]
     then
         echo -e "[${RED}KO${NORMAL}] Upload \"$file\" to \"$api_url\""
         return 1
@@ -153,18 +150,18 @@ function upload_file {
 }
 
 function download_file {
-    file_name=$(basename $file)
+    file_name=$(basename "$file")
     
-    curl -s $location \
-        --user api:$api_key \
-        --output $file
+    curl -s "$location" \
+        --user api:"$api_key" \
+        --output "$file"
 
     if [ $? != 0 ]
     then
         echo -e "[${RED}KO${NORMAL}] Download \"$file\" from \"$location\""
-        if [ ! -z $backup_path ]
+        if [ ! -z "$backup_path" ]
         then
-            mv "$backup_path/$file_name" $file
+            mv "$backup_path/$file_name" "$file"
         fi
         return 1
     else
@@ -173,15 +170,15 @@ function download_file {
 }
 
 function verify_file {
-    file_name=$(basename $file)
-    file_type=$(file $file | cut -d" " -f 2)
+    file_name=$(basename "$file")
+    file_type=$(file "$file" | grep -oh "PNG\|JPEG")
 
-    if [ $file_type != "PNG" ] && [ $file_type != "JPEG" ]
+    if [ "$file_type" != "PNG" ] && [ "$file_type" != "JPEG" ]
     then
         echo -e "[${RED}KO${NORMAL}] Verify \"$file\" downloaded is a valid file"
-        if [ ! -z $backup_path ]
+        if [ ! -z "$backup_path" ]
         then
-            mv "$backup_path/$file_name" $file
+            mv "$backup_path/$file_name" "$file"
         fi
         return 1
     else
@@ -192,19 +189,24 @@ function verify_file {
 function process_file {
     status=0
 
-    if ! check_file $1; then status=1; fi
-    if [ $status = 0 ] && ! backup_file $1; then status=1; fi
-    if [ $status = 0 ] && ! upload_file $1; then status=1; fi
-    if [ $status = 0 ] && ! download_file $1; then status=1; fi
-    if [ $status = 0 ] && ! verify_file $1; then status=1; fi
+    if ! check_file "$1"; then status=1; fi
+    if [ $status = 0 ] && ! backup_file "$1"; then status=1; fi
+    if [ $status = 0 ] && ! upload_file "$1"; then status=1; fi
+    if [ $status = 0 ] && ! download_file "$1"; then status=1; fi
+    if [ $status = 0 ] && ! verify_file "$1"; then status=1; fi
+
+    if [ $status != 0 ]
+    then
+        echo "$1" >> $failed_file
+    fi
 }
 
 function loop_files {
     cnt=0
 
-    for file in ${files[@]}
+    for file in "${files[@]}"
     do
-        process_file $file &
+        process_file "$file" &
         if [ $((cnt%10)) = 0 ] && [ $cnt != 0 ]
         then
             wait
@@ -215,12 +217,32 @@ function loop_files {
     wait
 }
 
+function print_failed {
+    if [ -f "$failed_file" ]
+    then
+        echo -e "${RED}The following files failed to be optimized:${NORMAL}"
+        cat "$failed_file"
+    fi
+}
+
+function propose_replace {
+    if [ -f "$failed_file"]
+    then
+        echo "The script failed to optimize all the files"
+        read -p "Do you want to restore the files using the backup ? [Y/n] " restore
+        read -p "Do you want to remove the backup directory ? [Y/n] " delete
+    fi
+    rm "$failed_file"
+}
+
 function main {
     get_args $@
     check_args
     get_files
     create_backup_dir
     loop_files
+    print_failed
+    propose_replace
 }
 
 main $@
