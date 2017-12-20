@@ -220,19 +220,30 @@ function loop_files {
 function print_failed {
     if [ -f "$failed_file" ]
     then
+        echo
         echo -e "${RED}The following files failed to be optimized:${NORMAL}"
         cat "$failed_file"
     fi
 }
 
-function propose_replace {
-    if [ -f "$failed_file"]
+function finish {
+    if [ -f "$failed_file" ]
     then
+        echo
         echo "The script failed to optimize all the files"
-        read -p "Do you want to restore the files using the backup ? [Y/n] " restore
-        read -p "Do you want to remove the backup directory ? [Y/n] " delete
+        
+        rm -f "$failed_file"
     fi
-    rm "$failed_file"
+
+    if [ ! -z "$backup_path" ]
+    then
+        read -p "Do you want to remove the backup directory ? [y/N] " delete
+
+        if [ "$delete" = "n" ]
+        then
+            rm -rf "$backup_path"
+        fi
+    fi
 }
 
 function main {
@@ -242,7 +253,7 @@ function main {
     create_backup_dir
     loop_files
     print_failed
-    propose_replace
+    finish
 }
 
 main $@
